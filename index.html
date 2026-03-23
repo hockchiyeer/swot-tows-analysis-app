@@ -277,7 +277,7 @@
                     <label class="block text-[10px] font-bold uppercase text-slate-400 mb-2">
                         Objective <span class="required-star">*</span>
                     </label>
-                    <input type="text" id="meta-objective" placeholder="e.g. Market Expansion" class="validate-field w-full border-b-2 border-slate-100 p-2 focus:border-blue-500 outline-none transition-colors">
+                    <textarea id="meta-objective" placeholder="e.g. Market Expansion" class="validate-field w-full border-b-2 border-slate-100 p-2 focus:border-blue-500 outline-none transition-colors strategy-textarea min-h-[42px] max-h-[120px] overflow-y-auto" rows="1"></textarea>
                 </div>
                 <div>
                     <label class="block text-[10px] font-bold uppercase text-slate-400 mb-2">
@@ -568,6 +568,11 @@
                 });
             }
 
+            document.getElementById('meta-objective').addEventListener('input', function() {
+                this.style.height = 'auto';
+                this.style.height = (this.scrollHeight) + 'px';
+            });
+
             document.getElementById('main-app').addEventListener('input', () => {
                 checkValidation();
             });
@@ -676,7 +681,9 @@
             data = { s: [], w: [], o: [], t: [] };
             latestSuggestion = null;
             document.getElementById('meta-client').value = '';
-            document.getElementById('meta-objective').value = '';
+            const objectiveEl = document.getElementById('meta-objective');
+            objectiveEl.value = '';
+            objectiveEl.style.height = 'auto';
             document.getElementById('meta-lead').value = '';
             document.getElementById('input-s').value = '';
             document.getElementById('input-w').value = '';
