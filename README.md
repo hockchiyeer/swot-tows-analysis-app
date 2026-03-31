@@ -2,6 +2,8 @@
 
 Browser-based strategic planning dashboard for building a SWOT analysis, translating it into TOWS options, scoring strategic posture on a radar chart, and exporting the result as a presentation-style PDF deck.
 
+👉 You can explore the live application rendered from this repository’s source code at: https://aistudio.google.com/apps/2567c7ce-3835-409b-a37a-508372727390?fullscreenApplet=true&showPreview=true&showAssistant=true
+
 The current app is implemented as a single static file: [index.html](./index.html).
 
 ## What It Does
