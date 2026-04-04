@@ -1827,7 +1827,7 @@
                     const list = document.getElementById(`exp-list-${cat}`);
                     list.innerHTML = data[cat].map(item => `<li>${item}</li>`).join('') || '<li>N/A</li>';
                 });
-                document.getElementById('exp-title-1').innerText = `${client} : Strategic SWOT`;
+                document.getElementById('exp-title-1').innerText = `Strategic SWOT: ${document.getElementById('meta-objective').value || "Strategic Objective"}`;
 
                 // Populate Slide 2 (Radar)
                 document.getElementById('exp-title-2').innerText = `${client} : Strategic Positioning`;
