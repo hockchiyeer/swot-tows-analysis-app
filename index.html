@@ -9,6 +9,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script type="module" src="/src/exports.ts"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Poppins:wght@600;700&display=swap');
         
@@ -254,13 +255,60 @@
                 <h1 class="text-3xl font-bold text-slate-900 font-['Poppins']">Principal Strategy Dashboard</h1>
                 <p class="text-slate-500">Interactive SWOT & Executive Synthesis Tool</p>
             </div>
-            <div class="flex flex-wrap gap-3">
-                <button id="reset-trigger-btn" class="px-5 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-3">
+                <button id="reset-trigger-btn" class="px-5 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition flex items-center gap-2 text-sm font-medium">
                     <i class="fas fa-undo"></i> Reset All
                 </button>
-                <button id="export-btn" disabled onclick="exportMultiSlidePDF()" class="px-6 py-2.5 bg-blue-800 text-white rounded-lg hover:bg-blue-900 flex items-center gap-2 shadow-lg transition-all">
-                    <i class="fas fa-file-export"></i> <span>Generate Strategy Deck</span>
-                </button>
+                <div id="export-dropdown-container" class="relative inline-block text-left">
+                    <button
+                        id="export-btn"
+                        type="button"
+                        disabled
+                        aria-haspopup="true"
+                        aria-expanded="false"
+                        onclick="toggleExportMenu(event)"
+                        class="px-6 py-2.5 bg-blue-800 text-white rounded-lg hover:bg-blue-900 flex items-center gap-2.5 shadow-lg transition-all text-sm font-semibold tracking-wide"
+                    >
+                        <i class="fas fa-file-export"></i>
+                        <span>Export</span>
+                        <i id="export-chevron" class="fas fa-chevron-down text-xs transition-transform duration-200"></i>
+                    </button>
+                    <div
+                        id="export-menu"
+                        role="menu"
+                        aria-labelledby="export-btn"
+                        class="hidden absolute left-0 lg:left-auto lg:right-0 mt-2 w-64 origin-top-left lg:origin-top-right rounded-xl bg-white shadow-xl ring-1 ring-slate-200 border border-slate-100 py-1.5 z-50"
+                    >
+                        <button type="button" role="menuitem" onclick="handleExportSelection('pdf')" class="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-900 flex items-center gap-3 transition-colors">
+                            <i class="fas fa-file-pdf text-rose-600 w-4 text-center"></i>
+                            <div class="flex flex-col">
+                                <span class="font-semibold">PDF Slide Deck</span>
+                                <span class="text-[11px] text-slate-400">4-slide executive presentation (.pdf)</span>
+                            </div>
+                        </button>
+                        <button type="button" role="menuitem" onclick="handleExportSelection('word')" class="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-indigo-50 hover:text-indigo-900 flex items-center gap-3 transition-colors">
+                            <i class="fas fa-file-word text-indigo-600 w-4 text-center"></i>
+                            <div class="flex flex-col">
+                                <span class="font-semibold">Word</span>
+                                <span class="text-[11px] text-slate-400">Formatted report with chart (.docx)</span>
+                            </div>
+                        </button>
+                        <button type="button" role="menuitem" onclick="handleExportSelection('excel')" class="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-emerald-50 hover:text-emerald-900 flex items-center gap-3 transition-colors">
+                            <i class="fas fa-file-excel text-emerald-600 w-4 text-center"></i>
+                            <div class="flex flex-col">
+                                <span class="font-semibold">Excel</span>
+                                <span class="text-[11px] text-slate-400">Multi-sheet workbook (.xlsx)</span>
+                            </div>
+                        </button>
+                        <button type="button" role="menuitem" onclick="handleExportSelection('text')" class="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 flex items-center gap-3 transition-colors">
+                            <i class="fas fa-file-lines text-slate-600 w-4 text-center"></i>
+                            <div class="flex flex-col">
+                                <span class="font-semibold">Text</span>
+                                <span class="text-[11px] text-slate-400">Structured plain-text report (.txt)</span>
+                            </div>
+                        </button>
+                    </div>
+                </div>
             </div>
         </header>
 
@@ -543,7 +591,6 @@
     </div>
 
     <script>
-        const apiKey = ""; // API Key gets populated by environment
         let data = { s: [], w: [], o: [], t: [] };
         let latestSuggestion = null;
         let radarChart;
@@ -590,6 +637,19 @@
 
             updateBrainstormModeDisplay();
             checkValidation();
+
+            document.addEventListener('click', (event) => {
+                const container = document.getElementById('export-dropdown-container');
+                if (container && !container.contains(event.target)) {
+                    closeExportMenu();
+                }
+            });
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') {
+                    closeExportMenu();
+                }
+            });
         });
 
         function initRadarChart() {
@@ -671,6 +731,9 @@
 
             const isAllValid = !!(client && objective && lead && hasS && hasW && hasO && hasT && synthesis && posture && risk);
             exportBtn.disabled = !isAllValid;
+            if (!isAllValid) {
+                closeExportMenu();
+            }
         }
 
         function closeConfirmModal() {
@@ -739,7 +802,7 @@
                 if (container) {
                     container.innerHTML = data[cat].map((tag, i) => `
                         <span class="tag">
-                            ${tag}
+                            ${escapeHtml(tag)}
                             <i class="fas fa-times ml-2 text-slate-300 hover:text-rose-500 cursor-pointer" onclick="removeTag('${cat}', ${i})"></i>
                         </span>
                     `).join('');
@@ -748,23 +811,36 @@
             checkValidation();
         }
 
-        function getConfiguredApiKey() {
-            return (window.GEMINI_API_KEY || apiKey || "").trim();
+        function showStatusToast(message, tone = 'error') {
+            let toast = document.getElementById('app-status-toast');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'app-status-toast';
+                toast.setAttribute('role', 'status');
+                document.body.appendChild(toast);
+            }
+            const toneClass = tone === 'success'
+                ? 'bg-emerald-700 text-white'
+                : 'bg-rose-700 text-white';
+            toast.className = `fixed bottom-5 right-5 z-[200] max-w-sm px-4 py-3 rounded-xl shadow-xl text-sm font-medium flex items-center gap-2.5 transition-opacity duration-200 ${toneClass}`;
+            toast.innerHTML = `<i class="fas ${tone === 'success' ? 'fa-circle-check' : 'fa-circle-exclamation'}"></i><span>${escapeHtml(message)}</span>`;
+            toast.style.opacity = '1';
+            clearTimeout(toast._hideTimer);
+            toast._hideTimer = setTimeout(() => {
+                toast.style.opacity = '0';
+            }, 4000);
         }
 
         function updateBrainstormModeDisplay() {
             const label = document.getElementById('brainstorm-btn-label');
             const helper = document.getElementById('brainstorm-helper-text');
-            const hasKey = !!getConfiguredApiKey();
 
             if (label) {
-                label.innerText = hasKey ? 'Brainstorm with Gemini' : 'Brainstorm via Google Search';
+                label.innerText = 'Brainstorm with Gemini';
             }
 
             if (helper) {
-                helper.innerHTML = hasKey
-                    ? `<i class="fas fa-circle-info mr-1"></i> Fill mandatory fields (<span class="text-rose-400 font-bold">*</span>) to enable strategic brainstorming`
-                    : `<i class="fas fa-circle-info mr-1"></i> No Gemini key detected. The app will open Google Search and let you paste the AI/search summary for auto-fill.`;
+                helper.innerHTML = `<i class="fas fa-circle-info mr-1"></i> Fill mandatory fields (<span class="text-rose-400 font-bold">*</span>) to enable strategic brainstorming`;
             }
         }
 
@@ -1393,52 +1469,6 @@
             latestSuggestion = null;
         }
 
-        async function legacyStartBrainstorm() {
-            const client = document.getElementById('meta-client').value;
-            const objective = document.getElementById('meta-objective').value;
-            const lead = document.getElementById('meta-lead').value;
-
-            if (!client || !objective || !lead) {
-                [ 'meta-client', 'meta-objective', 'meta-lead' ].forEach(id => {
-                    const el = document.getElementById(id);
-                    if(!el.value) el.classList.add('border-rose-300');
-                });
-                setTimeout(() => {
-                    [ 'meta-client', 'meta-objective', 'meta-lead' ].forEach(id => {
-                        document.getElementById(id).classList.remove('border-rose-300');
-                    });
-                }, 2000);
-                return;
-            }
-
-            const modal = document.getElementById('brainstorm-modal');
-            const content = document.getElementById('brainstorm-content');
-            const actions = document.getElementById('brainstorm-actions');
-            modal.classList.add('active');
-            actions.innerHTML = `<button onclick="closeBrainstorm()" class="px-6 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 font-semibold transition">Dismiss</button>`;
-            
-            content.innerHTML = `<div class="flex flex-col items-center justify-center py-12 text-center"><div class="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mb-4"></div><p>Gemini is synthesizing strategy...</p></div>`;
-
-            try {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: `Strategy SWOT for ${client} seeking ${objective}` }] }],
-                        systemInstruction: { parts: [{ text: "Tier-1 Management Consultant. Return JSON: {strengths:[], weaknesses:[], opportunities:[], threats:[], tows:{so:'', wo:'', st:'', wt:''}, posture:'', recommendation:'', risk:'', radar:{innovation:0, market:0, agility:0, resilience:0, brand:0, talent:0}}" }] },
-                        generationConfig: { responseMimeType: "application/json" }
-                    })
-                });
-                const result = await response.json();
-                const suggestion = JSON.parse(result.candidates?.[0]?.content?.parts?.[0]?.text);
-                latestSuggestion = suggestion;
-                content.innerHTML = `<div class="space-y-6"><div class="grid grid-cols-2 gap-4">${['strengths','weaknesses','opportunities','threats'].map(k => `<div class="p-3 bg-slate-50 rounded border border-slate-100"><h4 class="font-bold text-xs mb-2 uppercase">${k}</h4><ul class="text-xs space-y-1">${suggestion[k].map(s => `<li>• ${s}</li>`).join('')}</ul></div>`).join('')}</div><div class="p-3 bg-indigo-50 border border-indigo-100 rounded-lg text-indigo-800 text-sm font-semibold flex items-center gap-2"><i class="fas fa-chess-board"></i> TOWS Strategic Options generated.</div><div class="p-4 bg-slate-900 text-white rounded-xl"><p class="text-sm italic">"${suggestion.recommendation}"</p></div></div>`;
-                actions.innerHTML = `<button onclick="closeBrainstorm()" class="px-6 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition">Dismiss</button><button onclick="acceptSuggestion()" class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">Apply Insights</button>`;
-            } catch (error) {
-                content.innerHTML = `<p class="text-rose-600">Error connecting to Gemini.</p>`;
-            }
-        }
-
         async function startBrainstorm() {
             const client = document.getElementById('meta-client').value.trim();
             const objective = document.getElementById('meta-objective').value.trim();
@@ -1449,52 +1479,28 @@
                 return;
             }
 
-            if (!getConfiguredApiKey()) {
-                showGoogleSearchFallback(client, objective, 'No Gemini API key configured.', true);
-                return;
-            }
-
             const ui = openBrainstormModal('Grounded Gemini Brainstorm');
             ui.actions.innerHTML = `<button onclick="closeBrainstorm()" class="px-6 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 font-semibold transition">Dismiss</button>`;
             ui.content.innerHTML = `<div class="flex flex-col items-center justify-center py-12 text-center"><div class="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mb-4"></div><p>Gemini is searching Google and synthesizing strategy...</p></div>`;
 
             try {
-                const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent', {
+                const response = await fetch('/api/gemini/brainstorm', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'x-goog-api-key': getConfiguredApiKey()
+                        'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        contents: [{
-                            parts: [{
-                                text: `Create a concise but decision-useful SWOT and TOWS analysis for ${client} with the objective "${objective}". Use current web information when it materially helps. Return strict JSON with this exact shape: {"strengths":[],"weaknesses":[],"opportunities":[],"threats":[],"tows":{"so":"","wo":"","st":"","wt":""},"posture":"","recommendation":"","risk":"","radar":{"innovation":0,"market":0,"agility":0,"resilience":0,"brand":0,"talent":0}}`
-                            }]
-                        }],
-                        systemInstruction: {
-                            parts: [{
-                                text: 'Act like a management consultant. Ground claims in Google Search when helpful. Keep each SWOT list to 3-5 crisp items and keep radar values between 0 and 100.'
-                            }]
-                        },
-                        tools: [{ google_search: {} }],
-                        generationConfig: {
-                            responseMimeType: 'application/json',
-                            temperature: 0.4
-                        }
+                        client,
+                        objective
                     })
                 });
 
+                const result = await response.json().catch(() => null);
                 if (!response.ok) {
-                    const errorBody = await response.text();
-                    throw new Error(`Gemini request failed (${response.status}). ${errorBody}`);
+                    throw new Error(result?.error || `Gemini request failed (${response.status}).`);
                 }
 
-                const result = await response.json();
-                const payload = extractJsonPayload(result?.candidates?.[0]?.content?.parts?.[0]?.text || '');
-                latestSuggestion = normalizeSuggestion({
-                    ...JSON.parse(payload),
-                    sources: extractGroundingSources(result)
-                });
+                latestSuggestion = normalizeSuggestion(result);
 
                 renderSuggestionPreview(latestSuggestion, {
                     title: 'Grounded Gemini Brainstorm',
@@ -1815,17 +1821,63 @@
             }
         }
 
-        async function exportMultiSlidePDF() {
+        function setExportButtonState(isLoading, loadingText = 'Exporting...') {
             const btn = document.getElementById('export-btn');
+            if (!btn) return;
+
+            if (isLoading) {
+                btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> <span>${loadingText}</span>`;
+                btn.disabled = true;
+            } else {
+                btn.innerHTML = `
+                    <i class="fas fa-file-export"></i>
+                    <span>Export</span>
+                    <i id="export-chevron" class="fas fa-chevron-down text-xs transition-transform duration-200"></i>
+                `;
+                checkValidation();
+            }
+        }
+
+        function closeExportMenu() {
+            const menu = document.getElementById('export-menu');
+            const btn = document.getElementById('export-btn');
+            const chevron = document.getElementById('export-chevron');
+            if (menu) menu.classList.add('hidden');
+            if (btn) btn.setAttribute('aria-expanded', 'false');
+            if (chevron) chevron.classList.remove('rotate-180');
+        }
+
+        function toggleExportMenu(event) {
+            if (event) event.stopPropagation();
+            const btn = document.getElementById('export-btn');
+            const menu = document.getElementById('export-menu');
+            const chevron = document.getElementById('export-chevron');
+            if (!btn || !menu || btn.disabled) return;
+
+            const willOpen = menu.classList.contains('hidden');
+            menu.classList.toggle('hidden', !willOpen);
+            btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+            if (chevron) chevron.classList.toggle('rotate-180', willOpen);
+        }
+
+        function handleExportSelection(format) {
+            closeExportMenu();
+            if (format === 'pdf') {
+                exportMultiSlidePDF();
+            } else {
+                exportReport(format);
+            }
+        }
+
+        async function exportMultiSlidePDF() {
             const client = document.getElementById('meta-client').value || "Strategic Assessment";
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
-            btn.disabled = true;
+            setExportButtonState(true, 'Generating...');
 
             try {
                 // Populate Slide 1 (SWOT)
                 ['s', 'w', 'o', 't'].forEach(cat => {
                     const list = document.getElementById(`exp-list-${cat}`);
-                    list.innerHTML = data[cat].map(item => `<li>${item}</li>`).join('') || '<li>N/A</li>';
+                    list.innerHTML = data[cat].map(item => `<li>${escapeHtml(item)}</li>`).join('') || '<li>N/A</li>';
                 });
                 document.getElementById('exp-title-1').innerText = `Strategic SWOT: ${document.getElementById('meta-objective').value || "Strategic Objective"}`;
 
@@ -1887,10 +1939,74 @@
                 pdf.save(`${client.replace(/\s+/g, '_')}_Strategy_Deck.pdf`);
             } catch (err) {
                 console.error(err);
-                alert("An error occurred while generating the PDF. Check console for details.");
+                showStatusToast('An error occurred while generating the PDF. Check console for details.');
             } finally {
-                btn.innerHTML = '<i class="fas fa-file-export"></i> <span>Generate Strategy Deck</span>';
-                checkValidation();
+                setExportButtonState(false);
+            }
+        }
+
+        function collectReportData() {
+            const radarCanvas = document.getElementById('positioningRadar');
+            const radarAspectRatio = radarCanvas && radarCanvas.height > 0
+                ? radarCanvas.width / radarCanvas.height
+                : 1.5;
+
+            return {
+                client: document.getElementById('meta-client').value.trim() || 'Strategic Assessment',
+                objective: document.getElementById('meta-objective').value.trim() || 'Strategic Objective',
+                lead: document.getElementById('meta-lead').value.trim() || 'N/A',
+                generatedAt: new Date().toLocaleString(),
+                swot: {
+                    strengths: [...(data.s || [])],
+                    weaknesses: [...(data.w || [])],
+                    opportunities: [...(data.o || [])],
+                    threats: [...(data.t || [])]
+                },
+                tows: {
+                    so: document.getElementById('tows-so').value.trim(),
+                    wo: document.getElementById('tows-wo').value.trim(),
+                    st: document.getElementById('tows-st').value.trim(),
+                    wt: document.getElementById('tows-wt').value.trim()
+                },
+                radar: {
+                    innovation: parseInt(document.getElementById('slider-innovation').value, 10) || 0,
+                    market: parseInt(document.getElementById('slider-market').value, 10) || 0,
+                    agility: parseInt(document.getElementById('slider-agility').value, 10) || 0,
+                    resilience: parseInt(document.getElementById('slider-resilience').value, 10) || 0,
+                    brand: parseInt(document.getElementById('slider-brand').value, 10) || 0,
+                    talent: parseInt(document.getElementById('slider-talent').value, 10) || 0
+                },
+                radarImageDataUrl: radarCanvas ? radarCanvas.toDataURL('image/png', 1.0) : undefined,
+                radarImageAspectRatio: radarAspectRatio,
+                synthesis: document.getElementById('synthesis-text').value.trim(),
+                posture: document.getElementById('meta-posture').value.trim(),
+                risk: document.getElementById('meta-risk').value.trim()
+            };
+        }
+
+        async function exportReport(format) {
+            const exporters = window.strategyExporters;
+            if (!exporters) {
+                showStatusToast('Report exporter is still initializing. Please try again in a moment.');
+                return;
+            }
+
+            setExportButtonState(true, 'Exporting...');
+
+            try {
+                const reportData = collectReportData();
+                if (format === 'word') {
+                    await exporters.exportWordReport(reportData);
+                } else if (format === 'excel') {
+                    await exporters.exportExcelReport(reportData);
+                } else if (format === 'text') {
+                    exporters.exportTextReport(reportData);
+                }
+            } catch (err) {
+                console.error(err);
+                showStatusToast(`An error occurred while generating the ${format.toUpperCase()} report.`);
+            } finally {
+                setExportButtonState(false);
             }
         }
     </script>

@@ -1,0 +1,6 @@
+{
+  "name": "SWOT-TOWS Analysis: Strategy Synthesis Engine",
+  "description": "",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
