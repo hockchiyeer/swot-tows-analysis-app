@@ -1497,21 +1497,24 @@
 
                 const result = await response.json().catch(() => null);
                 if (!response.ok) {
-                    throw new Error(result?.error || `Gemini request failed (${response.status}).`);
+                    const fallbackReason = result?.error || `Gemini request failed (${response.status}).`;
+                    console.warn('Switching to Google Search fallback:', fallbackReason);
+                    showGoogleSearchFallback(client, objective, fallbackReason, false);
+                    return;
                 }
 
                 latestSuggestion = normalizeSuggestion(result);
 
                 renderSuggestionPreview(latestSuggestion, {
-                    title: 'Grounded Gemini Brainstorm',
-                    bannerTitle: 'Grounded Draft Ready',
+                    title: latestSuggestion.sources.length ? 'Grounded Gemini Brainstorm' : 'Gemini Strategic Brainstorm',
+                    bannerTitle: latestSuggestion.sources.length ? 'Grounded Draft Ready' : 'Strategic Draft Ready',
                     bannerText: latestSuggestion.sources.length
                         ? 'Gemini used Google Search grounding for this draft. Review it, then apply to populate the dashboard.'
                         : 'Gemini generated a structured draft. Review it, then apply to populate the dashboard.'
                 });
             } catch (error) {
-                console.error(error);
-                showGoogleSearchFallback(client, objective, error.message || 'Gemini request failed.', false);
+                console.warn('Gemini brainstorm unavailable, using Google Search fallback:', error?.message || error);
+                showGoogleSearchFallback(client, objective, error?.message || 'Gemini request failed.', false);
             }
         }
 
