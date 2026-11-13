@@ -880,9 +880,157 @@
                 .trim();
         }
 
+        function stripMarkdownInline(value) {
+            return cleanText(value)
+                .replace(/^#{1,6}\s*/gm, '')
+                .replace(/\*\*(.*?)\*\*/g, '$1')
+                .replace(/__(.*?)__/g, '$1')
+                .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,;:!?]|$)/g, '$1$2')
+                .replace(/`([^`]+)`/g, '$1')
+                .replace(/\[[0-9,\s]+\]/g, '')
+                .replace(/^\s*\|\s*|\s*\|\s*$/g, '')
+                .replace(/\s*\|\s*/g, ' ')
+                .replace(/[ \t]+/g, ' ')
+                .trim();
+        }
+
+        function isDecorativeOrSeparatorLine(line) {
+            const trimmed = String(line ?? '').trim();
+            if (!trimmed) return true;
+            if (/^[-=_*─━~—–]{2,}$/.test(trimmed)) return true;
+            if (/^\|?[\s:|-]+\|?$/.test(trimmed)) return true;
+            if (/^[•●▪◦*\-—–]+$/.test(trimmed)) return true;
+            return false;
+        }
+
+        function isMarkdownTableHeader(cells) {
+            if (!cells.length) return false;
+            const joined = cells.map(c => c.toLowerCase()).join(' ');
+            const first = cells[0].toLowerCase();
+            if (/^(quadrant|category|dimension|factor|risk\s*(category|area|factor)|aspect|element|type|strategy\s*type)$/.test(first)) {
+                return true;
+            }
+            if (cells.length >= 2 && /^(risk|level|rating|severity|impact|likelihood|description|details|strategy|strategies|focus|rationale|mitigation)$/.test(cells[1].toLowerCase())) {
+                return true;
+            }
+            return /^(quadrant\s+strategic|risk\s+category\s+level)/.test(joined);
+        }
+
+        function parsePipeTableRow(line) {
+            if (!line || !line.includes('|')) return null;
+            const rawCells = line.split('|').map(cell => cell.trim());
+            if (rawCells.length && rawCells[0] === '') rawCells.shift();
+            if (rawCells.length && rawCells[rawCells.length - 1] === '') rawCells.pop();
+            const cells = rawCells.map(cell => stripMarkdownInline(cell)).filter(Boolean);
+            if (!cells.length) return null;
+            if (rawCells.every(cell => /^[:\-\s]*$/.test(cell))) return { isSeparator: true, cells: [] };
+            if (isMarkdownTableHeader(cells)) return { isHeader: true, cells };
+            return { isSeparator: false, isHeader: false, cells };
+        }
+
+        function formatPipeCellsToProse(cells) {
+            if (!cells.length) return '';
+            if (cells.length === 1) return cells[0];
+            if (cells.length === 2) return `${cells[0]}: ${cells[1]}`;
+            return `${cells[0]} (${cells[1]}): ${cells.slice(2).join(' — ')}`;
+        }
+
+        function stripTowsDescriptorPrefix(value) {
+            return String(value ?? '')
+                .replace(/^(?:Use Strengths to Capture Opportunities|Overcome Weaknesses via Opportunities|Use Strengths to Mitigate Threats|Minimize Weaknesses\s*(?:&|and)\s*Avoid Threats|Leverage strengths to maximize opportunities|Improve weaknesses via opportunities|Use strengths to mitigate threats|Defensive tactics against weaknesses\s*(?:&|and)\s*threats)\)?[\s:—–-]*/i, '')
+                .replace(/^[\s—–-]+/, '')
+                .trim();
+        }
+
+        function formatTowsContent(rawText) {
+            const cleaned = cleanText(rawText);
+            if (!cleaned) return '';
+            const lines = cleaned
+                .replace(/\s*[•●▪◦]\s*/g, '\n• ')
+                .split('\n')
+                .map(l => l.trim())
+                .filter(line => line && !isDecorativeOrSeparatorLine(line));
+
+            const formattedLines = [];
+            lines.forEach((line) => {
+                const tableRow = parsePipeTableRow(line);
+                if (tableRow) {
+                    if (tableRow.isSeparator || tableRow.isHeader) return;
+                    const bodyCells = tableRow.cells
+                        .slice(1)
+                        .map(cell => stripTowsDescriptorPrefix(cell))
+                        .filter(Boolean);
+                    const prose = bodyCells.length
+                        ? bodyCells.join(' — ')
+                        : stripTowsDescriptorPrefix(tableRow.cells[0]);
+                    if (prose && !isDecorativeOrSeparatorLine(prose)) formattedLines.push(prose);
+                    return;
+                }
+                const stripped = stripTowsDescriptorPrefix(stripMarkdownInline(line));
+                if (stripped && !isDecorativeOrSeparatorLine(stripped)) {
+                    formattedLines.push(stripped);
+                }
+            });
+
+            return formattedLines
+                .join('\n')
+                .replace(/\s+(?=\d+\.\s+[A-Z])/g, '\n')
+                .replace(/\n{3,}/g, '\n\n')
+                .trim();
+        }
+
+        function formatNarrativeSection(lines) {
+            const result = [];
+            lines.forEach((rawLine) => {
+                const line = cleanText(rawLine);
+                if (!line || isDecorativeOrSeparatorLine(line)) return;
+
+                const tableRow = parsePipeTableRow(line);
+                if (tableRow) {
+                    if (tableRow.isSeparator || tableRow.isHeader) return;
+                    const rowText = formatPipeCellsToProse(tableRow.cells);
+                    if (rowText) result.push(`• ${rowText}`);
+                    return;
+                }
+
+                const cleanedLine = stripMarkdownInline(line)
+                    .replace(/^[-*•●▪◦]\s+/, '• ')
+                    .trim();
+                if (cleanedLine && !isDecorativeOrSeparatorLine(cleanedLine)) {
+                    result.push(cleanedLine);
+                }
+            });
+
+            return result.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+        }
+
+        function preprocessFallbackText(rawText) {
+            return String(rawText ?? '')
+                .replace(/\r/g, '\n')
+                .replace(/([^\n])(#{1,6}\s+)/g, '$1\n$2')
+                .replace(/([^\n])\s*(\|\s*(?:SO|WO|ST|WT)\b)/gi, '$1\n$2')
+                .split('\n')
+                .map((line) => {
+                    // Convert HTML-copied tab-separated table rows into pipe rows before whitespace normalization
+                    if (line.includes('\t') && !line.startsWith('\t')) {
+                        const tabCells = line.split('\t').map(c => c.trim()).filter(Boolean);
+                        if (tabCells.length >= 2) {
+                            return `| ${tabCells.join(' | ')} |`;
+                        }
+                    }
+                    return line;
+                })
+                .join('\n')
+                .replace(/[ \t]+/g, ' ')
+                .replace(/\n{3,}/g, '\n\n')
+                .trim();
+        }
+
         function lowerCaseStart(value) {
-            const text = cleanText(value);
-            return text ? text.charAt(0).toLowerCase() + text.slice(1) : '';
+            const text = stripMarkdownInline(value);
+            if (!text) return '';
+            if (/^[A-Z]{2,}\b/.test(text)) return text;
+            return text.charAt(0).toLowerCase() + text.slice(1);
         }
 
         function uniqueItems(items) {
@@ -896,7 +1044,7 @@
         }
 
         function splitIntoCandidateItems(value) {
-            const cleaned = cleanText(value);
+            const cleaned = preprocessFallbackText(value);
             if (!cleaned) return [];
 
             const bulletNormalized = cleaned.replace(/[•●▪◦]/g, '\n');
@@ -904,11 +1052,26 @@
             const candidates = [];
 
             lines.forEach((line) => {
-                const normalizedLine = line.replace(/^[-*0-9.)\s]+/, '').trim();
-                if (!normalizedLine) return;
+                if (isDecorativeOrSeparatorLine(line)) return;
 
-                if (normalizedLine.length > 160) {
-                    const sentences = normalizedLine.match(/[^.!?]+[.!?]?/g) || [normalizedLine];
+                const tableRow = parsePipeTableRow(line);
+                if (tableRow) {
+                    if (tableRow.isSeparator || tableRow.isHeader) return;
+                    const prose = formatPipeCellsToProse(tableRow.cells);
+                    if (prose) candidates.push(prose);
+                    return;
+                }
+
+                if (detectSectionHeading(line)) return;
+
+                const normalizedLine = stripMarkdownInline(line)
+                    .replace(/^[-*0-9.)\s]+/, '')
+                    .trim();
+                if (!normalizedLine || isDecorativeOrSeparatorLine(normalizedLine)) return;
+
+                if (normalizedLine.length > 220) {
+                    // Split only at real sentence boundaries (avoid splitting decimals like 3.5%)
+                    const sentences = normalizedLine.split(/(?<=[.!?])\s+(?=[A-Z"'(])/) || [normalizedLine];
                     sentences.forEach(sentence => candidates.push(sentence));
                 } else {
                     candidates.push(normalizedLine);
@@ -917,8 +1080,8 @@
 
             return uniqueItems(
                 candidates
-                    .map(item => item.replace(/\[[0-9,\s]+\]/g, '').trim())
-                    .map(item => cleanText(item))
+                    .map(item => stripMarkdownInline(item))
+                    .filter(item => item && !isDecorativeOrSeparatorLine(item) && !detectSectionHeading(item))
                     .filter(item => item.length >= 12 || item.split(/\s+/).length >= 3)
             );
         }
@@ -1211,19 +1374,39 @@
         }
 
         function detectSectionHeading(line) {
-            const normalized = line.toLowerCase().replace(/^[^a-z]+/, '');
+            const raw = String(line ?? '').trim();
+            if (!raw || isDecorativeOrSeparatorLine(raw)) return '';
 
+            // If line is a pipe table row, check first cell for TOWS quadrant headings
+            const candidateText = raw.includes('|')
+                ? (raw.split('|').map(c => c.trim()).find(Boolean) || raw)
+                : raw;
+
+            const cleaned = candidateText
+                .replace(/^[#*\->•●▪◦\s]+/, '')
+                .replace(/^\d+[.)]\s*/, '')
+                .replace(/\*\*/g, '')
+                .trim();
+
+            const normalized = cleaned.toLowerCase();
+
+            // Check specific SWOT/TOWS/Executive headings first
             if (/^strengths?\b/.test(normalized)) return 'strengths';
             if (/^weakness(es)?\b/.test(normalized)) return 'weaknesses';
             if (/^opportunit(y|ies)\b/.test(normalized)) return 'opportunities';
             if (/^threats?\b/.test(normalized)) return 'threats';
-            if (/^(so strategies?|so\b|maxi-maxi)\b/.test(normalized)) return 'so';
-            if (/^(wo strategies?|wo\b|mini-maxi)\b/.test(normalized)) return 'wo';
-            if (/^(st strategies?|st\b|maxi-mini)\b/.test(normalized)) return 'st';
-            if (/^(wt strategies?|wt\b|mini-mini)\b/.test(normalized)) return 'wt';
-            if (/^(executive synthesis|recommendation|summary|conclusion)\b/.test(normalized)) return 'recommendation';
-            if (/^(strategic posture|posture)\b/.test(normalized)) return 'posture';
-            if (/^(risk profile|risk appetite|risk)\b/.test(normalized)) return 'risk';
+            if (/^(so\s*(strategies?|options?)?|maxi-?maxi)\b/.test(normalized)) return 'so';
+            if (/^(wo\s*(strategies?|options?)?|mini-?maxi)\b/.test(normalized)) return 'wo';
+            if (/^(st\s*(strategies?|options?)?|maxi-?mini)\b/.test(normalized)) return 'st';
+            if (/^(wt\s*(strategies?|options?)?|mini-?mini)\b/.test(normalized)) return 'wt';
+            if (/^(executive\s*(synthesis|summary)|strategic\s*synthesis|recommendation(s)?|summary|conclusion)\b/.test(normalized)) return 'recommendation';
+            if (/^(overall\s+)?(strategic\s*posture|posture)\b/.test(normalized)) return 'posture';
+            if (/^(overall\s+)?(risk\s*(profile|appetite|assessment)|key\s*risks)\b/.test(normalized)) return 'risk';
+
+            // Container headings that group sub-sections (e.g. "## 1. SWOT Analysis", "## 2. TOWS Strategic Matrix")
+            if (/^(swot\s*(analysis|matrix)?|tows\s*(strategic\s*)?(matrix|options)?|strategic\s*assessment)\b/.test(normalized)) {
+                return '__container__';
+            }
 
             return '';
         }
@@ -1240,26 +1423,52 @@
                 wt: [],
                 recommendation: [],
                 posture: [],
-                risk: []
+                risk: [],
+                unheaded: []
             };
             let currentSection = '';
 
             text.split('\n').forEach((rawLine) => {
                 const line = cleanText(rawLine);
-                if (!line) return;
+                if (!line || isDecorativeOrSeparatorLine(line)) return;
 
                 const sectionKey = detectSectionHeading(line);
                 if (sectionKey) {
+                    if (sectionKey === '__container__') {
+                        currentSection = '';
+                        return;
+                    }
                     currentSection = sectionKey;
-                    const remainder = line.replace(/^[^:]+:\s*/, '').trim();
-                    if (remainder && remainder !== line) {
-                        sections[currentSection].push(remainder);
+
+                    if (line.includes('|')) {
+                        const tableRow = parsePipeTableRow(line);
+                        if (tableRow && !tableRow.isSeparator && !tableRow.isHeader && tableRow.cells.length > 1) {
+                            const isTows = currentSection === 'so' || currentSection === 'wo' || currentSection === 'st' || currentSection === 'wt';
+                            const bodyCells = tableRow.cells
+                                .slice(1)
+                                .map(cell => (isTows ? stripTowsDescriptorPrefix(cell) : cell))
+                                .filter(Boolean);
+                            if (bodyCells.length) {
+                                sections[currentSection].push(bodyCells.join(' — '));
+                            }
+                        }
+                        return;
+                    }
+
+                    const colonIdx = line.indexOf(':');
+                    if (colonIdx !== -1) {
+                        const remainder = stripMarkdownInline(line.slice(colonIdx + 1));
+                        if (remainder && !/^\([^)]+\)$/.test(remainder)) {
+                            sections[currentSection].push(remainder);
+                        }
                     }
                     return;
                 }
 
                 if (currentSection) {
                     sections[currentSection].push(line);
+                } else {
+                    sections.unheaded.push(line);
                 }
             });
 
@@ -1282,7 +1491,18 @@
         }
 
         function inferSwotItems(text, explicitSections) {
-            const segments = splitIntoCandidateItems(text);
+            const explicit = {
+                strengths: uniqueItems(splitIntoCandidateItems(explicitSections.strengths.join('\n'))).slice(0, 5),
+                weaknesses: uniqueItems(splitIntoCandidateItems(explicitSections.weaknesses.join('\n'))).slice(0, 5),
+                opportunities: uniqueItems(splitIntoCandidateItems(explicitSections.opportunities.join('\n'))).slice(0, 5),
+                threats: uniqueItems(splitIntoCandidateItems(explicitSections.threats.join('\n'))).slice(0, 5)
+            };
+
+            const fallbackSource = explicitSections.unheaded.length
+                ? explicitSections.unheaded.join('\n')
+                : '';
+
+            const segments = fallbackSource ? splitIntoCandidateItems(fallbackSource) : [];
             const inferred = {
                 strengths: [],
                 weaknesses: [],
@@ -1300,22 +1520,10 @@
             });
 
             return {
-                strengths: uniqueItems([
-                    ...splitIntoCandidateItems(explicitSections.strengths.join('\n')),
-                    ...inferred.strengths
-                ]).slice(0, 5),
-                weaknesses: uniqueItems([
-                    ...splitIntoCandidateItems(explicitSections.weaknesses.join('\n')),
-                    ...inferred.weaknesses
-                ]).slice(0, 5),
-                opportunities: uniqueItems([
-                    ...splitIntoCandidateItems(explicitSections.opportunities.join('\n')),
-                    ...inferred.opportunities
-                ]).slice(0, 5),
-                threats: uniqueItems([
-                    ...splitIntoCandidateItems(explicitSections.threats.join('\n')),
-                    ...inferred.threats
-                ]).slice(0, 5)
+                strengths: (explicit.strengths.length ? explicit.strengths : inferred.strengths).slice(0, 5),
+                weaknesses: (explicit.weaknesses.length ? explicit.weaknesses : inferred.weaknesses).slice(0, 5),
+                opportunities: (explicit.opportunities.length ? explicit.opportunities : inferred.opportunities).slice(0, 5),
+                threats: (explicit.threats.length ? explicit.threats : inferred.threats).slice(0, 5)
             };
         }
 
@@ -1382,17 +1590,28 @@
             };
         }
 
-        function generateRecommendation(client, objective, swot) {
-            const strength = lowerCaseStart(swot.strengths[0] || 'core capabilities');
-            const opportunity = lowerCaseStart(swot.opportunities[0] || objective || 'the target opportunity');
-            const weakness = lowerCaseStart(swot.weaknesses[0] || 'execution gaps');
-            const threat = lowerCaseStart(swot.threats[0] || 'external pressure');
+        function extractHeadlinePhrase(item, fallback) {
+            const cleaned = stripMarkdownInline(item);
+            if (!cleaned) return fallback;
+            const colonIdx = cleaned.indexOf(':');
+            if (colonIdx > 0 && colonIdx <= 65) {
+                const title = cleaned.slice(0, colonIdx).trim().replace(/[.!?]+$/, '');
+                return title ? `"${title}"` : fallback;
+            }
+            return lowerCaseStart(cleaned.replace(/[.!?]+$/, ''));
+        }
 
-            return `${client} should pursue ${objective} by leaning on ${strength} while translating ${opportunity} into near-term initiatives. The plan should close ${weakness} early and put controls in place against ${threat}.`;
+        function generateRecommendation(client, objective, swot) {
+            const strength = extractHeadlinePhrase(swot.strengths[0], 'core capabilities');
+            const opportunity = extractHeadlinePhrase(swot.opportunities[0], objective || 'the target opportunity');
+            const weakness = extractHeadlinePhrase(swot.weaknesses[0], 'execution gaps');
+            const threat = extractHeadlinePhrase(swot.threats[0], 'external pressure');
+
+            return `${client} should pursue ${objective} by leaning on ${strength} while translating ${opportunity} into near-term initiatives. The plan should address ${weakness} early and put controls in place against ${threat}.`;
         }
 
         function buildSuggestionFromSearchText(rawText, client, objective) {
-            const text = cleanText(rawText);
+            const text = preprocessFallbackText(rawText);
             if (!text) {
                 throw new Error('Paste a Google AI overview or search summary first.');
             }
@@ -1400,8 +1619,9 @@
             const explicitSections = extractHeadedSections(text);
             const swot = ensureSwotCompleteness(inferSwotItems(text, explicitSections), objective);
             const generatedTows = generateTowsStrategies(swot);
-            const posture = cleanText(explicitSections.posture.join('\n')) || inferPosture(swot);
-            const risk = cleanText(explicitSections.risk.join('\n')) || inferRisk(swot);
+            const posture = formatNarrativeSection(explicitSections.posture) || inferPosture(swot);
+            const risk = formatNarrativeSection(explicitSections.risk) || inferRisk(swot);
+            const recommendation = formatNarrativeSection(explicitSections.recommendation) || generateRecommendation(client, objective, swot);
 
             return normalizeSuggestion({
                 strengths: swot.strengths,
@@ -1409,13 +1629,13 @@
                 opportunities: swot.opportunities,
                 threats: swot.threats,
                 tows: {
-                    so: cleanText(explicitSections.so.join('\n')) || generatedTows.so,
-                    wo: cleanText(explicitSections.wo.join('\n')) || generatedTows.wo,
-                    st: cleanText(explicitSections.st.join('\n')) || generatedTows.st,
-                    wt: cleanText(explicitSections.wt.join('\n')) || generatedTows.wt
+                    so: formatTowsContent(explicitSections.so.join('\n')) || generatedTows.so,
+                    wo: formatTowsContent(explicitSections.wo.join('\n')) || generatedTows.wo,
+                    st: formatTowsContent(explicitSections.st.join('\n')) || generatedTows.st,
+                    wt: formatTowsContent(explicitSections.wt.join('\n')) || generatedTows.wt
                 },
                 posture,
-                recommendation: cleanText(explicitSections.recommendation.join('\n')) || generateRecommendation(client, objective, swot),
+                recommendation,
                 risk,
                 radar: inferRadar(text, swot),
                 sources: fallbackSearchContext?.searchUrl
@@ -1686,11 +1906,11 @@
             // Remove "would you like to explore" style questions
             formatted = formatted.replace(/Would you like to.*?\?/gi, '');
             
-            // Split into sentences/bullets
+            // Split into lines/bullets/sentences without splitting hyphenated words or decimals
             const bullets = formatted
-                .split(/[\n•*-]|(?<=[.!?])\s+/)
-                .map(s => s.trim())
-                .filter(s => s.length > 5 && !s.match(/^#+\s/)); // Filter out short lines and headers
+                .split(/\r?\n|[•●▪◦]+|(?<=[.!?])\s+(?=[A-Z"'(])/)
+                .map(s => stripMarkdownInline(s).replace(/^[-*]\s+/, '').trim())
+                .filter(s => s.length > 3 && !isDecorativeOrSeparatorLine(s) && !/^#+\s/.test(s));
             
             // Limit to first 10 bullets
             const maxBullets = 10;
@@ -1699,7 +1919,6 @@
             // Format as bullets
             return limited
                 .map(b => {
-                    // Clean up: capitalize first letter, ensure proper ending
                     let clean = b.charAt(0).toUpperCase() + b.slice(1);
                     if (!clean.match(/[.!?]$/)) clean += '.';
                     return `• ${clean}`;

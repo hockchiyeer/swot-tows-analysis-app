@@ -1275,6 +1275,17 @@ export function exportTextReport(report: StrategyReportData): void {
   const formatBullets = (items: string[]): string =>
     items.length ? items.map((item) => `  - ${item}`).join('\n') : '  - N/A';
 
+  const formatGovernanceBlock = (label: string, value: string): string => {
+    const cleaned = (value || '').trim();
+    if (!cleaned) return `${label}: N/A`;
+    const lines = cleaned
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (lines.length <= 1) return `${label}: ${lines[0] || 'N/A'}`;
+    return [`${label}: ${lines[0]}`, ...lines.slice(1).map((line) => `  ${line}`)].join('\n');
+  };
+
   const divider = '='.repeat(72);
   const subDivider = '-'.repeat(72);
 
@@ -1329,8 +1340,8 @@ export function exportTextReport(report: StrategyReportData): void {
     'Executive Synthesis & Key Recommendations:',
     report.synthesis || 'N/A',
     '',
-    `Strategic Posture : ${report.posture || 'N/A'}`,
-    `Risk Profile      : ${report.risk || 'N/A'}`,
+    formatGovernanceBlock('Strategic Posture ', report.posture),
+    formatGovernanceBlock('Risk Profile      ', report.risk),
     divider,
     '',
   ].join('\n');
